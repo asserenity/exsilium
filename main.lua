@@ -52,6 +52,7 @@ local Translations = {
         ["section_fake"] = "Fake Items",
         ["fake_korblox"] = "Korblox",
         ["fake_headless"] = "Headless",
+        ["anti_fling"] = "Anti-Fling",
     },
     ru = {
         ["language"] = "Язык",
@@ -98,6 +99,7 @@ local Translations = {
         ["section_fake"] = "Фейк-предметы",
         ["fake_korblox"] = "Korblox",
         ["fake_headless"] = "Headless",
+        ["anti_fling"] = "Анти-флинг",
     }
 }
 
@@ -262,7 +264,6 @@ local function startMain()
     gunIcon.ImageColor3 = Settings.ESP_ColorGun
     gunIcon.Parent = gunIconGui
 
-    -- Запасной текст, если картинка не загрузится
     local gunTextFallback = Instance.new("TextLabel")
     gunTextFallback.Name = "GunTextFallback"
     gunTextFallback.Size = UDim2.new(0, 50, 0, 30)
@@ -281,7 +282,6 @@ local function startMain()
         Settings.ESP_ColorGun = color
     end
 
-    -- Пытаемся загрузить локальную картинку из папки NLAssets
     local gunImagePath = "C:\\Users\\egork\\AppData\\Local\\Madium\\Workspace\\NLAssets\\rev.png"
     if isfile and isfile(gunImagePath) then
         gunIcon.Image = getcustomasset(gunImagePath)
@@ -302,7 +302,7 @@ local function startMain()
         return conn
     end
 
-    -- ====== ДИНАМИЧЕСКОЕ ОБНОВЛЕНИЕ РОЛЕЙ (оптимизированное) ======
+    -- ====== ДИНАМИЧЕСКОЕ ОБНОВЛЕНИЕ РОЛЕЙ ======
     local roleCache = {}
     local roleCacheValid = false
 
@@ -333,7 +333,6 @@ local function startMain()
         roleCacheValid = true
     end
 
-    -- Подписка на события
     local function onPlayerDataChanged(data)
         if not isRunning then return end
         updateRoles(data)
@@ -350,7 +349,6 @@ local function startMain()
     local roundStartEvent = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Gameplay"):WaitForChild("RoundStart")
     addConnection(roundStartEvent.OnClientEvent:Connect(onRoundStart))
 
-    -- Резервный опрос через модуль (раз в 0.5 секунды, но только если кеш не валиден)
     local currentRoundClient = require(ReplicatedStorage:WaitForChild("Modules"):WaitForChild("CurrentRoundClient"))
     task.spawn(function()
         while isRunning do
@@ -364,7 +362,6 @@ local function startMain()
         end
     end)
 
-    -- При появлении нового игрока принудительно обновляем кеш
     local function onPlayerAdded()
         if not isRunning then return end
         local data = currentRoundClient.GetLatestPlayerData()
@@ -386,7 +383,6 @@ local function startMain()
         return "Unknown"
     end
 
-    -- Поиск игрока по роли (исключаем мёртвых)
     local function findPlayerByRole(role)
         for name, data in pairs(roleCache) do
             if data.Dead then continue end
@@ -398,10 +394,10 @@ local function startMain()
         return nil
     end
 
-    -- ====== КЕШИРОВАННЫЙ ПОИСК ПИСТОЛЕТА (оптимиированный интервал) ======
+    -- ====== КЕШИРОВАННЫЙ ПОИСК ПИСТОЛЕТА ======
     local gunCache = nil
     local gunCacheTime = 0
-    local GUN_SEARCH_INTERVAL = 1 -- увеличен с 0.3 до 0.5
+    local GUN_SEARCH_INTERVAL = 1
 
     local function findDroppedGun()
         for _, obj in ipairs(workspace:GetDescendants()) do
@@ -425,14 +421,10 @@ local function startMain()
         if now - gunCacheTime > GUN_SEARCH_INTERVAL then
             gunCache = findDroppedGun()
             gunCacheTime = now
-            if gunCache then
-            else
-            end
         end
         return gunCache
     end
 
-    -- Телепорт к части
     local function teleportToPart(part)
         if not part then return end
         local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
@@ -578,6 +570,9 @@ local function startMain()
         ConfigFolder = "esiliumcfg",
         Keybind = "Insert"
     })
+
+    -- Загружаем иконки NeverLose
+    NeverLose:LoadIcon()
 
     local wm = Window:Watermark()
     local fpsBlock = wm:AddBlock("clock", "FPS: 0")
@@ -789,8 +784,8 @@ local function startMain()
         Callback = function(v) Settings.ESP_MaxDistance = v end
     })
 
-    local miscSec = addSection(visTab, "section_misc", "right")
-    row = miscSec:AddLabel(getText("misc_text_size"), false)
+    local miscSecVis = addSection(visTab, "section_misc", "right")
+    row = miscSecVis:AddLabel(getText("misc_text_size"), false)
     registerLabel("misc_text_size", row)
     row:AddSlider({
         Default = 14,
@@ -802,7 +797,7 @@ local function startMain()
         Callback = function(v) Settings.ESP_TextSize = v end
     })
 
-    row = miscSec:AddLabel(getText("misc_box_thickness"), false)
+    row = miscSecVis:AddLabel(getText("misc_box_thickness"), false)
     registerLabel("misc_box_thickness", row)
     row:AddSlider({
         Default = 1.5,
@@ -920,6 +915,508 @@ local function startMain()
         end
     })
 
+    -- ===================================================================
+    -- ВКЛАДКА PLAYERS (перенесена ВЫШЕ Misc)
+    -- ===================================================================
+    print("[Players] Создание вкладки...")
+    local playersTab = Window:AddTab({
+        Icon = "person",
+        Name = "Players",
+        Type = "Double"
+    })
+
+    -- Создаём секции
+    local listSection = playersTab:AddSection({
+        Name = "Player List",
+        Position = "left"
+    })
+    local actionSection = playersTab:AddSection({
+        Name = "Actions",
+        Position = "right"
+    })
+
+    -- Функция получения контейнера секции
+    local function getContainerFromSection(section)
+        local dummy = section:AddLabel("_temp_dummy_", false)
+        local container
+        if dummy.Root then
+            container = dummy.Root.Parent
+        else
+            container = dummy.Parent
+        end
+        dummy:SetVisible(false)
+        return container
+    end
+
+    -- Получаем контейнеры
+    local listContainer = getContainerFromSection(listSection)
+    local actionContainer = getContainerFromSection(actionSection)
+
+    if not listContainer or not actionContainer then
+        print("[Players] Не удалось получить контейнеры, вкладка не будет работать")
+    else
+        print("[Players] Контейнеры получены")
+    end
+
+    -- Состояние
+    local selectedPlayer = nil
+    local isSpectating = false
+    local currentSpectateTarget = nil
+    local originalCameraCFrame = nil
+    local spectateConnection = nil
+    local playerRows = {}
+
+    -- Функция обновления панели действий
+    local function updateActionPanel()
+        if not actionContainer then return end
+        -- очищаем
+        for _, child in ipairs(actionContainer:GetChildren()) do
+            if child:IsA("Frame") or child:IsA("TextLabel") or child:IsA("ImageButton") then
+                child:Destroy()
+            end
+        end
+
+        if not selectedPlayer then
+            local info = Instance.new("TextLabel")
+            info.Parent = actionContainer
+            info.Size = UDim2.new(1, -20, 0, 30)
+            info.BackgroundTransparency = 1
+            info.ZIndex = 9
+            info.Font = Enum.Font.GothamMedium
+            info.Text = "Select a player from the list"
+            info.TextColor3 = Color3.fromRGB(200, 200, 200)
+            info.TextSize = 14
+            info.TextTransparency = 0.5
+            return
+        end
+
+        -- Фрейм с аватаркой и именем
+        local avatarFrame = Instance.new("Frame")
+        avatarFrame.Parent = actionContainer
+        avatarFrame.Size = UDim2.new(1, -20, 0, 40)
+        avatarFrame.BackgroundTransparency = 1
+        avatarFrame.ZIndex = 9
+
+        local avatarImage = Instance.new("ImageLabel")
+        avatarImage.Parent = avatarFrame
+        avatarImage.Size = UDim2.new(0, 32, 0, 32)
+        avatarImage.Position = UDim2.new(0, 0, 0.5, -16)
+        avatarImage.BackgroundTransparency = 1
+        avatarImage.ZIndex = 10
+        local thumb = Players:GetUserThumbnailAsync(selectedPlayer.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size48x48)
+        avatarImage.Image = thumb
+        avatarImage.ImageColor3 = Color3.fromRGB(255, 255, 255)
+
+        local nameLabel = Instance.new("TextLabel")
+        nameLabel.Parent = avatarFrame
+        nameLabel.Size = UDim2.new(1, -40, 1, 0)
+        nameLabel.Position = UDim2.new(0, 40, 0, 0)
+        nameLabel.BackgroundTransparency = 1
+        nameLabel.ZIndex = 10
+        nameLabel.Font = Enum.Font.GothamBold
+        nameLabel.Text = selectedPlayer.Name
+        nameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+        nameLabel.TextSize = 16
+        nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+        nameLabel.TextYAlignment = Enum.TextYAlignment.Center
+
+        local function createActionButton(text, icon, callback)
+            local frame = Instance.new("Frame")
+            frame.Parent = actionContainer
+            frame.Size = UDim2.new(1, -20, 0, 30)
+            frame.BackgroundColor3 = Color3.fromRGB(20, 22, 27)
+            frame.BackgroundTransparency = 0.5
+            frame.ZIndex = 10
+            local corner = Instance.new("UICorner", frame)
+            corner.CornerRadius = UDim.new(0, 4)
+
+            local iconLabel = Instance.new("TextLabel")
+            iconLabel.Parent = frame
+            iconLabel.Size = UDim2.new(0, 30, 1, 0)
+            iconLabel.BackgroundTransparency = 1
+            iconLabel.FontFace = NeverLose.BuiltInBold
+            iconLabel.Text = icon
+            iconLabel.TextColor3 = Color3.fromRGB(223, 223, 223)
+            iconLabel.TextSize = 18
+            iconLabel.TextTransparency = 0.25
+            iconLabel.ZIndex = 11
+
+            local textLabel = Instance.new("TextLabel")
+            textLabel.Parent = frame
+            textLabel.Size = UDim2.new(1, -35, 1, 0)
+            textLabel.Position = UDim2.new(0, 35, 0, 0)
+            textLabel.BackgroundTransparency = 1
+            textLabel.Font = Enum.Font.GothamMedium
+            textLabel.Text = text
+            textLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+            textLabel.TextSize = 13
+            textLabel.TextTransparency = 0.2
+            textLabel.TextXAlignment = Enum.TextXAlignment.Left
+            textLabel.ZIndex = 11
+
+            local btn = Instance.new("ImageButton")
+            btn.Parent = frame
+            btn.Size = UDim2.new(1, 0, 1, 0)
+            btn.BackgroundTransparency = 1
+            btn.ZIndex = 12
+            btn.ImageTransparency = 1
+
+            btn.MouseButton1Click:Connect(callback)
+
+            btn.MouseEnter:Connect(function()
+                frame.BackgroundTransparency = 0.2
+            end)
+            btn.MouseLeave:Connect(function()
+                frame.BackgroundTransparency = 0.5
+            end)
+
+            return frame
+        end
+
+        -- Fling (с отключением Anti-Fling и увеличенной задержкой)
+        createActionButton("Fling", "arrow-large-up", function()
+            local wasActive = antiFlingActive
+            if wasActive then
+                disableAntiFling()
+                print("[Fling] Anti-Fling временно отключён")
+                task.wait(0.3) -- увеличенная задержка для гарантии остановки циклов
+            end
+
+            local success, err = pcall(function()
+                if not selectedPlayer or not selectedPlayer.Character then return end
+                local targetRoot = selectedPlayer.Character:FindFirstChild("HumanoidRootPart")
+                if not targetRoot then return end
+
+                local localChar = LocalPlayer.Character
+                if not localChar then return end
+                local localRoot = localChar:FindFirstChild("HumanoidRootPart")
+                if not localRoot then return end
+
+                local fakePart = Instance.new("Part")
+                fakePart.Size = Vector3.new(5,5,5)
+                fakePart.Anchored = true
+                fakePart.CanCollide = false
+                fakePart.Transparency = 0.5
+                fakePart.Material = Enum.Material.ForceField
+                fakePart.Parent = workspace
+                fakePart.CFrame = targetRoot.CFrame
+
+                local att1 = Instance.new("Attachment", fakePart)
+                local att2 = Instance.new("Attachment", localRoot)
+                local alignPos = Instance.new("AlignPosition")
+                alignPos.Attachment0 = att2
+                alignPos.Attachment1 = att1
+                alignPos.RigidityEnabled = true
+                alignPos.Responsiveness = math.huge
+                alignPos.MaxForce = math.huge
+                alignPos.MaxVelocity = math.huge
+                alignPos.MaxAxesForce = Vector3.new(math.huge, math.huge, math.huge)
+                alignPos.Visible = true
+                alignPos.Mode = Enum.PositionAlignmentMode.TwoAttachment
+                alignPos.Parent = fakePart
+
+                local hum = localChar:FindFirstChildOfClass("Humanoid")
+                if hum then
+                    hum:ChangeState(Enum.HumanoidStateType.StrafingNoPhysics)
+                end
+
+                local startCF = localRoot.CFrame
+
+                localRoot.CFrame = CFrame.new(Vector3.new(0, 40000000, 0)) * CFrame.fromEulerAnglesXYZ(math.rad(180),0,0)
+                localRoot.Velocity = Vector3.new(0, 1000000, 0)
+                task.wait(3)
+
+                localRoot.Velocity = Vector3.new(0,0,0)
+                localRoot.CFrame = startCF
+                task.wait(0.05)
+
+                localRoot.CFrame = targetRoot.CFrame
+                fakePart.Position = targetRoot.Position
+
+                local startTime = tick()
+                local power = 1000
+                local flingThread = game:GetService("RunService").Heartbeat:Connect(function()
+                    if tick() - startTime > 4 then
+                        flingThread:Disconnect()
+                        return
+                    end
+                    fakePart.Position = targetRoot.Position
+                    localRoot.CFrame = fakePart.CFrame
+                    localRoot.AssemblyAngularVelocity = Vector3.new(math.random(-1000,1000), math.random(-1000,1000) * power, math.random(-1000,1000))
+                    localRoot.Velocity = Vector3.new(math.random(-500,500), math.random(-500,500), math.random(-500,500))
+                    if tick() % 0.1 < 0.05 then
+                        targetRoot:ApplyImpulse(Vector3.new(math.random(-300,300), 500, math.random(-300,300)))
+                    end
+                end)
+
+                task.wait(4)
+                flingThread:Disconnect()
+                fakePart:Destroy()
+
+                localRoot.Velocity = Vector3.new(0,0,0)
+                localRoot.AssemblyAngularVelocity = Vector3.new(0,0,0)
+                localRoot.CFrame = startCF
+
+                if hum then
+                    hum:ChangeState(Enum.HumanoidStateType.Running)
+                end
+                print("Flinged " .. selectedPlayer.Name)
+            end)
+
+            if not success then
+                warn("[Fling] Ошибка: " .. tostring(err))
+            end
+
+            if wasActive then
+                enableAntiFling()
+                print("[Fling] Anti-Fling восстановлен")
+            end
+        end)
+
+        -- TP To Player
+        createActionButton("TP To Player", "person-standing", function()
+            if not selectedPlayer then return end
+            teleportTo(selectedPlayer)
+        end)
+
+        -- Spectate
+        createActionButton(isSpectating and "Stop Spectate" or "Spectate", "eye", function()
+            if isSpectating then
+                isSpectating = false
+                currentSpectateTarget = nil
+                if spectateConnection then
+                    spectateConnection:Disconnect()
+                    spectateConnection = nil
+                end
+                if originalCameraCFrame then
+                    workspace.CurrentCamera.CFrame = originalCameraCFrame
+                    originalCameraCFrame = nil
+                end
+                updateActionPanel()
+            else
+                if selectedPlayer then
+                    if not selectedPlayer.Character then
+                        print("Target has no character")
+                        return
+                    end
+                    local head = selectedPlayer.Character:FindFirstChild("Head")
+                    if not head then
+                        print("Target has no Head")
+                        return
+                    end
+                    isSpectating = true
+                    currentSpectateTarget = selectedPlayer
+                    originalCameraCFrame = workspace.CurrentCamera.CFrame
+                    if spectateConnection then spectateConnection:Disconnect() end
+                    spectateConnection = RunService.RenderStepped:Connect(function()
+                        if not isSpectating or not selectedPlayer or not selectedPlayer.Character then
+                            isSpectating = false
+                            if spectateConnection then
+                                spectateConnection:Disconnect()
+                                spectateConnection = nil
+                            end
+                            if originalCameraCFrame then
+                                workspace.CurrentCamera.CFrame = originalCameraCFrame
+                                originalCameraCFrame = nil
+                            end
+                            updateActionPanel()
+                            return
+                        end
+                        local targetHead = selectedPlayer.Character:FindFirstChild("Head")
+                        if targetHead then
+                            local offset = targetHead.CFrame.LookVector * -5
+                            local camPos = targetHead.Position + offset + Vector3.new(0, 1, 0)
+                            workspace.CurrentCamera.CFrame = CFrame.new(camPos, targetHead.Position)
+                        end
+                    end)
+                    updateActionPanel()
+                end
+            end
+        end)
+
+        -- Copy Name
+        createActionButton("Copy Name", "document-circle-slash", function()
+            if not selectedPlayer then return end
+            local success = pcall(function()
+                if setclipboard then
+                    setclipboard(selectedPlayer.Name)
+                elseif toclipboard then
+                    toclipboard(selectedPlayer.Name)
+                else
+                    print("Copied: " .. selectedPlayer.Name)
+                end
+            end)
+            if success then
+                print("Copied username: " .. selectedPlayer.Name)
+            else
+                print("Clipboard not available")
+            end
+        end)
+
+        -- Copy ID
+        createActionButton("Copy ID", "hashtag", function()
+            if not selectedPlayer then return end
+            local success = pcall(function()
+                if setclipboard then
+                    setclipboard(tostring(selectedPlayer.UserId))
+                elseif toclipboard then
+                    toclipboard(tostring(selectedPlayer.UserId))
+                else
+                    print("Copied: " .. selectedPlayer.UserId)
+                end
+            end)
+            if success then
+                print("Copied UserId: " .. selectedPlayer.UserId)
+            else
+                print("Clipboard not available")
+            end
+        end)
+    end
+
+    -- Функция перестроения списка игроков
+    local function rebuildPlayerList()
+        if not listContainer then return end
+        for _, row in ipairs(playerRows) do
+            pcall(function() row:Destroy() end)
+        end
+        table.clear(playerRows)
+
+        local players = Players:GetPlayers()
+        for _, plr in ipairs(players) do
+            if plr == LocalPlayer then continue end
+
+            local row = Instance.new("Frame")
+            row.Name = "PlayerRow_" .. plr.UserId
+            row.Parent = listContainer
+            row.BackgroundColor3 = Color3.fromRGB(25, 27, 33)
+            row.BackgroundTransparency = 1
+            row.Size = UDim2.new(1, -10, 0, 40)
+            row.ZIndex = 9
+
+            local avatar = Instance.new("ImageLabel")
+            avatar.Parent = row
+            avatar.AnchorPoint = Vector2.new(0, 0.5)
+            avatar.Position = UDim2.new(0, 10, 0.5, 0)
+            avatar.Size = UDim2.new(0, 30, 0, 30)
+            avatar.BackgroundTransparency = 1
+            avatar.ZIndex = 10
+            local thumb = Players:GetUserThumbnailAsync(plr.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size48x48)
+            avatar.Image = thumb
+            avatar.ImageColor3 = Color3.fromRGB(255, 255, 255)
+
+            local nameLabel = Instance.new("TextLabel")
+            nameLabel.Parent = row
+            nameLabel.AnchorPoint = Vector2.new(0, 0.5)
+            nameLabel.Position = UDim2.new(0, 50, 0.5, 0)
+            nameLabel.Size = UDim2.new(1, -60, 0, 20)
+            nameLabel.BackgroundTransparency = 1
+            nameLabel.ZIndex = 10
+            nameLabel.Font = Enum.Font.GothamMedium
+            nameLabel.Text = plr.Name
+            nameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+            nameLabel.TextSize = 14
+            nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+            local clickButton = Instance.new("ImageButton")
+            clickButton.Parent = row
+            clickButton.Size = UDim2.new(1, 0, 1, 0)
+            clickButton.BackgroundTransparency = 1
+            clickButton.ZIndex = 11
+            clickButton.ImageTransparency = 1
+
+            clickButton.MouseButton1Click:Connect(function()
+                if isSpectating then
+                    isSpectating = false
+                    if spectateConnection then
+                        spectateConnection:Disconnect()
+                        spectateConnection = nil
+                    end
+                    if originalCameraCFrame then
+                        workspace.CurrentCamera.CFrame = originalCameraCFrame
+                        originalCameraCFrame = nil
+                    end
+                end
+                selectedPlayer = plr
+                updateActionPanel()
+            end)
+
+            local function onHover(enter)
+                if enter then
+                    row.BackgroundTransparency = 0.35
+                else
+                    row.BackgroundTransparency = 1
+                end
+            end
+            clickButton.MouseEnter:Connect(function() onHover(true) end)
+            clickButton.MouseLeave:Connect(function() onHover(false) end)
+
+            table.insert(playerRows, row)
+        end
+
+        if #playerRows == 0 then
+            local emptyLabel = Instance.new("TextLabel")
+            emptyLabel.Parent = listContainer
+            emptyLabel.Size = UDim2.new(1, -10, 0, 30)
+            emptyLabel.BackgroundTransparency = 1
+            emptyLabel.ZIndex = 9
+            emptyLabel.Font = Enum.Font.GothamMedium
+            emptyLabel.Text = "No other players in server"
+            emptyLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
+            emptyLabel.TextSize = 14
+            emptyLabel.TextTransparency = 0.5
+            table.insert(playerRows, emptyLabel)
+        end
+    end
+
+    -- Инициализация списка игроков
+    if listContainer and actionContainer then
+        rebuildPlayerList()
+        updateActionPanel()
+
+        local function onPlayerAddedHandler(plr)
+            rebuildPlayerList()
+            if selectedPlayer and selectedPlayer == plr then
+                selectedPlayer = nil
+                updateActionPanel()
+            end
+        end
+
+        local function onPlayerRemovingHandler(plr)
+            if selectedPlayer and selectedPlayer == plr then
+                if isSpectating then
+                    isSpectating = false
+                    if spectateConnection then
+                        spectateConnection:Disconnect()
+                        spectateConnection = nil
+                    end
+                    if originalCameraCFrame then
+                        workspace.CurrentCamera.CFrame = originalCameraCFrame
+                        originalCameraCFrame = nil
+                    end
+                end
+                selectedPlayer = nil
+            end
+            rebuildPlayerList()
+            updateActionPanel()
+        end
+
+        if not _G.PlayerListHandlersAdded then
+            _G.PlayerListHandlersAdded = true
+            Players.PlayerAdded:Connect(onPlayerAddedHandler)
+            Players.PlayerRemoving:Connect(onPlayerRemovingHandler)
+        end
+    else
+        print("[Players] Ошибка: контейнеры не получены")
+    end
+
+    print("[Players] Вкладка создана")
+    -- ===================================================================
+    -- КОНЕЦ ВКЛАДКИ PLAYERS
+    -- ===================================================================
+
+    -- ===================================================================
+    -- ВКЛАДКА MISC (теперь ниже Players)
+    -- ===================================================================
     local miscTab = Window:AddTab({ Icon = "gear", Name = "Misc" })
 
     local fakeSec = addSection(miscTab, "section_fake")
@@ -928,7 +1425,6 @@ local function startMain()
     local korbloxPart = nil
     local headlessActive = false
 
-    -- ====== ИСПРАВЛЕННАЯ ФУНКЦИЯ toggleKorblox ======
     local function toggleKorblox(state)
         korbloxActive = state
         local character = LocalPlayer.Character
@@ -940,7 +1436,6 @@ local function startMain()
                 korbloxPart = nil
             end
 
-            local torso = character:FindFirstChild("Torso") or character:FindFirstChild("UpperTorso")
             local origUpper = character:FindFirstChild("RightUpperLeg")
             local origLower = character:FindFirstChild("RightLowerLeg")
             local origFoot = character:FindFirstChild("RightFoot")
@@ -972,17 +1467,14 @@ local function startMain()
             mesh.Scale = Vector3.new(thickness, scaleY, thickness)
             mesh.Parent = newLeg
 
-            -- Позиционируем новую ногу относительно бедра
             newLeg.CFrame = origUpper.CFrame + Vector3.new(0, offsetY, 0)
 
-            -- КЛЮЧЕВОЕ ИЗМЕНЕНИЕ: привариваем к бедру (origUpper), а не к торсу
             local weld = Instance.new("Weld")
             weld.Part0 = origUpper
             weld.Part1 = newLeg
             weld.C0 = origUpper.CFrame:Inverse() * newLeg.CFrame
             weld.Parent = newLeg
 
-            -- Скрываем оригинальные части
             origUpper.Transparency = 1
             origLower.Transparency = 1
             origFoot.Transparency = 1
@@ -1013,7 +1505,6 @@ local function startMain()
             end
         end
     end
-    -- ====== КОНЕЦ ИСПРАВЛЕННОЙ ФУНКЦИИ ======
 
     local function toggleHeadless(state)
         headlessActive = state
@@ -1065,6 +1556,124 @@ local function startMain()
             toggleHeadless(v)
         end
     })
+
+    -- ============================================================
+    -- НОВАЯ СЕКЦИЯ: ANTI-FLING (исправленный, без отключения CanCollide)
+    -- ============================================================
+    local antiFlingSec = miscTab:AddSection({
+        Name = "Anti-Fling",
+        Position = "left"
+    })
+    local antiFlingLabel = antiFlingSec:AddLabel(getText("anti_fling"), false)
+    registerLabel("anti_fling", antiFlingLabel)
+
+    -- Переменные
+    local antiFlingActive = false
+    local antiFlingConnections = {}
+    local LastPosition = nil
+
+    -- Функция нейтрализации персонажа (только сброс скоростей, без изменения CanCollide)
+    local function neutralizeCharacter(character)
+        if not character then return end
+        for _, v in ipairs(character:GetDescendants()) do
+            if v:IsA("BasePart") then
+                v.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+                v.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+                -- Не трогаем CanCollide и CustomPhysicalProperties
+            end
+        end
+    end
+
+    -- Функция включения
+    local function enableAntiFling()
+        if antiFlingActive then return end
+        antiFlingActive = true
+
+        -- Функция обработки Heartbeat для локального игрока
+        local function antiFlingLoop()
+            if not antiFlingActive then return end
+            local character = LocalPlayer.Character
+            if not character then return end
+            local primaryPart = character.PrimaryPart
+            if not primaryPart then return end
+
+            if primaryPart.AssemblyLinearVelocity.Magnitude > 250 or primaryPart.AssemblyAngularVelocity.Magnitude > 250 then
+                primaryPart.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+                primaryPart.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+                if LastPosition then
+                    primaryPart.CFrame = LastPosition
+                end
+                neutralizeCharacter(character)
+                print("[Anti-Fling] Neutralized fling.")
+            elseif primaryPart.AssemblyLinearVelocity.Magnitude < 50 and primaryPart.AssemblyAngularVelocity.Magnitude < 50 then
+                LastPosition = primaryPart.CFrame
+            end
+        end
+
+        local conn = RunService.Heartbeat:Connect(antiFlingLoop)
+        table.insert(antiFlingConnections, conn)
+
+        local function onCharacterAdded(character)
+            if not antiFlingActive then return end
+            task.wait(0.1)
+            neutralizeCharacter(character)
+        end
+
+        local charConn = LocalPlayer.CharacterAdded:Connect(onCharacterAdded)
+        table.insert(antiFlingConnections, charConn)
+
+        if LocalPlayer.Character then
+            neutralizeCharacter(LocalPlayer.Character)
+        end
+
+        print("[Anti-Fling] Включён (только сброс скоростей)")
+    end
+
+    -- Функция выключения
+    local function disableAntiFling()
+        if not antiFlingActive then return end
+        antiFlingActive = false
+
+        -- Отключаем все подключения
+        for _, conn in ipairs(antiFlingConnections) do
+            pcall(conn.Disconnect, conn)
+        end
+        table.clear(antiFlingConnections)
+
+        LastPosition = nil
+        print("[Anti-Fling] Выключён")
+    end
+
+    -- Тумблер
+    local antiFlingToggle = antiFlingLabel:AddToggle({
+        Default = false,
+        Flag = "AntiFling",
+        Callback = function(state)
+            if state then
+                enableAntiFling()
+            else
+                disableAntiFling()
+            end
+        end
+    })
+
+    -- При респавне автоматически применяем, если включено
+    LocalPlayer.CharacterAdded:Connect(function()
+        if antiFlingActive then
+            task.wait(0.1)
+            local character = LocalPlayer.Character
+            if character then
+                neutralizeCharacter(character)
+            end
+        end
+    end)
+
+    -- При старте, если тумблер уже включён (сохранён в настройках)
+    task.wait(0.5)
+    if antiFlingToggle:GetValue() then
+        antiFlingActive = true
+        enableAntiFling()
+    end
 
     local unloadSec = addSection(miscTab, "section_unload")
     btn = unloadSec:AddButton({
@@ -1126,7 +1735,7 @@ local function startMain()
     registerButton("misc_unload", btn)
 
     -- ============================================================
-    -- ESP для игроков (оптимизированное кеширование)
+    -- ESP для игроков
     -- ============================================================
 
     local function createESPObjects(id)
@@ -1170,14 +1779,12 @@ local function startMain()
         return e
     end
 
-    -- Проверка валидности через pcall, но не каждый кадр, а раз в 30 кадров
     local frameCounter = 0
     local VALIDATION_INTERVAL = 30
 
     local function ensureESPValid(id)
         local e = espCache[id]
         if not e then return false end
-        -- Проверяем только если пришло время
         frameCounter = frameCounter + 1
         if frameCounter % VALIDATION_INTERVAL == 0 then
             local ok, _ = pcall(function()
@@ -1187,7 +1794,6 @@ local function startMain()
                 _ = e.Tracer.Visible
             end)
             if not ok then
-                -- Объекты невалидны, удаляем и пересоздадим позже
                 for _, obj in pairs(e) do
                     pcall(function() obj:Remove() end)
                 end
@@ -1201,7 +1807,6 @@ local function startMain()
     local function updateESP(id, char, root, name, role, cam)
         if not isRunning or not Settings.ESP_Enabled then return end
 
-        -- Если игрок мёртв – скрываем ESP
         if role == "Dead" then
             local e = espCache[id]
             if e then
@@ -1213,9 +1818,7 @@ local function startMain()
             return
         end
 
-        -- Проверяем валидность (редко)
         if espCache[id] and not ensureESPValid(id) then
-            -- объекты были невалидны, createESPObjects создаст заново при следующем вызове
         end
 
         if not espCache[id] then
@@ -1324,16 +1927,12 @@ local function startMain()
         removeESPForPlayer(tostring(plr.UserId))
     end))
 
-    -- ============================================================
-    -- Рендер-луп (оптимизированный)
-    -- ============================================================
     addConnection(RunService.RenderStepped:Connect(function()
         if not isRunning then return end
 
         local cam = workspace.CurrentCamera
         if not cam then return end
 
-        -- ==== ESP для игроков ====
         if Settings.ESP_Enabled then
             for _, plr in ipairs(Players:GetPlayers()) do
                 if plr == LocalPlayer then continue end
@@ -1342,7 +1941,6 @@ local function startMain()
                     local role = getRole(plr)
                     updateESP(tostring(plr.UserId), plr.Character, root, plr.Name, role, cam)
                 else
-                    -- Если нет корня, скрываем объекты (но не удаляем)
                     local e = espCache[tostring(plr.UserId)]
                     if e then
                         e.Out.Visible = false
@@ -1353,7 +1951,6 @@ local function startMain()
                 end
             end
         else
-            -- Если ESP выключен, скрываем все объекты
             for _, e in pairs(espCache) do
                 if e.Box then e.Box.Visible = false end
                 if e.Out then e.Out.Visible = false end
@@ -1362,7 +1959,6 @@ local function startMain()
             end
         end
 
-        -- ==== ESP для пистолета ====
         if Settings.ESP_Enabled and Settings.ESP_ShowGun then
             local gun = getCachedGun()
             if gun then
@@ -1428,7 +2024,6 @@ local function startMain()
             gunTextFallback.Visible = false
         end
 
-        -- ==== Мышь и FOV ====
         if Settings.ShowTarget and Settings.Enabled then
             local target = getClosestTarget()
             if target then
@@ -1458,7 +2053,7 @@ local function startMain()
         updateUI()
     end)
 
-    print("ty for using exsilium<3")
+    print("ty for using exsilium<3>")
 end
 
 local function showLoader()
