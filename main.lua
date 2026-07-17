@@ -3,7 +3,7 @@ local NeverLose = loadstring(game:HttpGet("https://raw.githubusercontent.com/ass
 if _G.NeverloseLoaded then return end
 _G.NeverloseLoaded = true
 
-local TweenService = game:GetService("TweenService")  -- добавлено для Flick
+local TweenService = game:GetService("TweenService")
 
 local isRunning = false
 local mainCodeLoaded = false
@@ -258,7 +258,6 @@ local function startMain()
     fovCircle.Transparency = 1
     fovCircle.Color = Color3.fromRGB(54, 57, 241)
 
-    -- ========== СОЗДАНИЕ GUI ДЛЯ ИКОНКИ ПИСТОЛЕТА ==========
     local gunIconGui = Instance.new("ScreenGui")
     gunIconGui.Name = "GunIconGUI"
     gunIconGui.IgnoreGuiInset = true
@@ -306,7 +305,6 @@ local function startMain()
         end
     end)
 
-    -- ========== СОЗДАНИЕ GUI ДЛЯ MODERN ИНДИКАТОРА (HUD) ==========
     local modernIndicatorGui = Instance.new("ScreenGui")
     modernIndicatorGui.Name = "ModernIndicatorGUI"
     modernIndicatorGui.IgnoreGuiInset = true
@@ -372,9 +370,6 @@ local function startMain()
     roleLabel.ZIndex = 999
     roleLabel.Parent = modernFrame
 
-    -- ============================================================
-    -- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
-    -- ============================================================
 
     local roleCache = {}
     local roleCacheValid = false
@@ -495,7 +490,6 @@ local function startMain()
         return conn
     end
 
-    -- ====== ДИНАМИЧЕСКОЕ ОБНОВЛЕНИЕ РОЛЕЙ (события) ======
     local function onPlayerDataChanged(data)
         if not isRunning then return end
         updateRoles(data)
@@ -545,7 +539,6 @@ local function startMain()
         return nil
     end
 
-    -- ====== КЕШИРОВАННЫЙ ПОИСК ПИСТОЛЕТА ======
     local gunCache = nil
     local gunCacheTime = 0
     local GUN_SEARCH_INTERVAL = 1
@@ -648,7 +641,6 @@ local function startMain()
 
             local targetRole = getRole(plr)
             if myRoleStr == "Murderer" then
-                -- can target anyone
             elseif myRoleStr == "Sheriff" or myRoleStr == "Innocent" then
                 if targetRole ~= "Murderer" then
                     continue
@@ -892,9 +884,6 @@ local function startMain()
         end
     })
 
-    -- ============================================================
-    -- ВКЛАДКА VISUALS
-    -- ============================================================
     local visTab = Window:AddTab({ Icon = "eye", Name = "Visuals", Type = "Double" })
 
     local coreSec = addSection(visTab, "section_core", "left")
@@ -1018,10 +1007,6 @@ local function startMain()
         Flag = "ESP_OnlyMurderer",
         Callback = function(v) Settings.ESP_OnlyMurderer = v end
     })
-
-    -- ============================================================
-    -- ESP PREVIEW – отдельное окно, привязанное к главному окну
-    -- ============================================================
 
     local function loadPreviewImage()
         local dir = 'NLAssets'
@@ -1177,9 +1162,6 @@ local function startMain()
         end
     end)
 
-    -- ============================================================
-    -- ВКЛАДКА WORLD – обновлённые пресеты (Pink заменён, Crimson и Night удалены)
-    -- ============================================================
     local worldTab = Window:AddTab({
         Icon = "globe-detailed",
         Name = "World"
@@ -1192,9 +1174,6 @@ local function startMain()
         }
     }
 
-    -- ------------------------------------------------------------------
-    -- 1. Секция SKYBOX (без изменений)
-    -- ------------------------------------------------------------------
     local function setupSkybox()
         local sec = worldTab:AddSection({
             Name = "Skybox",
@@ -1324,9 +1303,6 @@ local function startMain()
         })
     end
 
-    -- ------------------------------------------------------------------
-    -- 2. Секция WORLD CORRECTION
-    -- ------------------------------------------------------------------
     local function setupWorldCorrection()
         local sec = worldTab:AddSection({
             Name = "World Correction",
@@ -1381,9 +1357,6 @@ local function startMain()
         })
     end
 
-    -- ------------------------------------------------------------------
-    -- 3. Секция COLORS
-    -- ------------------------------------------------------------------
     local function setupColors()
         local sec = worldTab:AddSection({
             Name = "Colors",
@@ -1412,9 +1385,6 @@ local function startMain()
         })
     end
 
-    -- ------------------------------------------------------------------
-    -- 4. Секция ENVIRONMENT
-    -- ------------------------------------------------------------------
     local function setupEnvironment()
         local sec = worldTab:AddSection({
             Name = "Environment",
@@ -1442,9 +1412,6 @@ local function startMain()
         })
     end
 
-    -- ------------------------------------------------------------------
-    -- 5. Секция PRESETS (обновлённые пресеты: Pink заменён, Crimson и Night удалены)
-    -- ------------------------------------------------------------------
     local function setupPresets()
         local sec = worldTab:AddSection({
             Name = "Presets",
@@ -1847,9 +1814,6 @@ local function startMain()
     setupEnvironment()
     setupPresets()
 
-    -- ============================================================
-    -- MOVEMENT TAB
-    -- ============================================================
     local movTab = Window:AddTab({ Icon = "person-standing", Name = "Movement" })
 
     local tpSec = addSection(movTab, "section_teleports")
@@ -2003,9 +1967,6 @@ local function startMain()
         end
     })
 
-    -- ===================================================================
-    -- ВКЛАДКА PLAYERS (оставляем без изменений)
-    -- ===================================================================
     local playersTab = Window:AddTab({
         Icon = "person",
         Name = "Players",
@@ -2480,9 +2441,6 @@ local function startMain()
     end
 
 
-    -- ===================================================================
-    -- ВКЛАДКА MISC
-    -- ===================================================================
     local miscTab = Window:AddTab({ Icon = "gear", Name = "Misc" })
 
     local fakeSec = addSection(miscTab, "section_fake")
@@ -2623,9 +2581,6 @@ local function startMain()
         end
     })
 
-    -- ============================================================
-    -- ANTI-FLING
-    -- ============================================================
     local antiFlingSec = miscTab:AddSection({
         Name = "Anti-Fling",
         Position = "left"
@@ -2728,9 +2683,6 @@ local function startMain()
         enableAntiFling()
     end
 
-    -- ============================================================
-    -- FLICK (поворот камеры/персонажа) – С ЗАЩИТОЙ ОТ МЫШИ
-    -- ============================================================
     local flickSec = miscTab:AddSection({ Name = "Flick", Position = "left" })
     local flickLabel = flickSec:AddLabel("Flick", false)
 
@@ -2738,12 +2690,11 @@ local function startMain()
     local flickSteps = 6
     local flickDelay = 0.001
     local flickSensMult = 1.0
-    local flickMethod = "Camera"  -- "Camera" или "Character"
+    local flickMethod = "Camera" 
 
     local flickKeybind = nil
     local originalCameraType = nil
 
-    -- Функция флика
     local function doFlick()
         local cam = workspace.CurrentCamera
         local player = LocalPlayer
@@ -2754,15 +2705,12 @@ local function startMain()
         local angleRad = math.rad(anglePerStep * flickSensMult)
 
         if flickMethod == "Camera" then
-            -- Метод Camera: блокируем управление и вращаем камеру вокруг головы
             local head = character:FindFirstChild("Head") or character:FindFirstChild("HumanoidRootPart")
             if not head then return end
 
-            -- Запоминаем текущее состояние камеры
             originalCameraType = cam.CameraType
             cam.CameraType = Enum.CameraType.Scriptable
 
-            -- Смещение камеры от головы
             local headPos = head.Position
             local camPos = cam.CFrame.Position
             local offset = camPos - headPos
@@ -2770,29 +2718,24 @@ local function startMain()
             local up = cam.CFrame.UpVector
 
             for i = 1, flickSteps do
-                -- Поворачиваем векторы вокруг мировой оси Y
                 local rotation = CFrame.Angles(0, angleRad, 0)
                 local newOffset = rotation * offset
                 local newLook = rotation * look
                 local newUp = rotation * up
 
-                -- Новая позиция камеры = голова + повёрнутое смещение
                 local newPos = head.Position + newOffset
                 cam.CFrame = CFrame.lookAt(newPos, newPos + newLook, newUp)
 
-                -- Обновляем для следующего шага
                 offset = newOffset
                 look = newLook
                 up = newUp
                 task.wait(flickDelay)
             end
 
-            -- Восстанавливаем управление
             cam.CameraType = originalCameraType or Enum.CameraType.Custom
             originalCameraType = nil
 
         else
-            -- Метод Character: вращаем персонажа (без блокировки камеры)
             local root = character:FindFirstChild("HumanoidRootPart")
             if not root then return end
 
@@ -2806,7 +2749,6 @@ local function startMain()
         end
     end
 
-    -- Keybind (дефолт G)
     flickKeybind = flickLabel:AddKeybind({
         Default = "G",
         Flag = "FlickKeybind",
@@ -2814,7 +2756,6 @@ local function startMain()
         end
     })
 
-    -- Глобальный хук ввода
     local function onInputBegan(input, gameProcessed)
         if gameProcessed then return end
         if input.UserInputType ~= Enum.UserInputType.Keyboard then return end
@@ -2830,7 +2771,6 @@ local function startMain()
     local connection = UserInputService.InputBegan:Connect(onInputBegan)
     table.insert(connections, connection)
 
-    -- ===== Настройки (Option) =====
     local flickOption = flickLabel:AddOption()
 
     flickOption:AddLabel("Total Angle"):AddSlider({
@@ -2876,9 +2816,6 @@ local function startMain()
         end
     })
 
-    -- ============================================================
-    -- EMERGENCY (UNLOAD)
-    -- ============================================================
     local unloadSec = addSection(miscTab, "section_unload")
     btn = unloadSec:AddButton({
         Name = getText("misc_unload"),
@@ -2945,10 +2882,6 @@ local function startMain()
         end
     })
     registerButton("misc_unload", btn)
-
-    -- ============================================================
-    -- ESP для игроков (оставляем без изменений)
-    -- ============================================================
 
     local function createESPObjects(id)
         if espCache[id] then
@@ -3149,7 +3082,6 @@ local function startMain()
 
         menuOpen = Window.Signal:GetValue()
 
-        -- ========== ESP ==========
         if Settings.ESP_Enabled then
             for _, plr in ipairs(Players:GetPlayers()) do
                 if plr == LocalPlayer then continue end
@@ -3176,7 +3108,6 @@ local function startMain()
             end
         end
 
-        -- ========== Gun ESP ==========
         if Settings.ESP_Enabled and Settings.ESP_ShowGun then
             local gun = getCachedGun()
             if gun then
@@ -3242,7 +3173,6 @@ local function startMain()
             gunTextFallback.Visible = false
         end
 
-        -- ========== ИНДИКАТОР SILENT AIM ==========
         local showIndicators = Settings.ShowTarget and Settings.Enabled
         local style = Settings.IndicatorStyle
 
